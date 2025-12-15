@@ -52,15 +52,17 @@ if uploaded_file is not None:
     elif "valid_votes" not in dist_df.columns:
         st.error("Column 'valid_votes' is missing")
     else:
-        # Convert to numeric safely
+        # ---- SAFE NUMERIC CONVERSION ----
         dist_df["valid_votes"] = pd.to_numeric(
             dist_df["valid_votes"], errors="coerce"
         )
 
         for col in vote_cols:
-            dist_df[col] = pd.to_numeric(dist_df[col], errors="coerce")
+            dist_df[col] = pd.to_numeric(
+                dist_df[col], errors="coerce"
+            )
 
-        # Vote share calculation (safe for zero / NaN)
+        # ---- SAFE VOTE SHARE ----
         for col in vote_cols:
             dist_df[f"{col}_share"] = np.where(
                 dist_df["valid_votes"] > 0,
@@ -68,21 +70,27 @@ if uploaded_file is not None:
                 0
             )
 
-        # Winner & margin
+        # ---- WINNER ----
         dist_df["winner"] = dist_df[vote_cols].idxmax(axis=1)
 
-        dist_df["margin"] = (
-            dist_df[vote_cols].max(axis=1)
-            - dist_df[vote_cols].nlargest(2, axis=1).iloc[:, -1]
-        )
+        # ---- SAFE MARGIN CALCULATION (NO nlargest) ----
+        def compute_margin(row):
+            votes = row[vote_cols].dropna().values
+            if len(votes) < 2:
+                return 0
+            votes_sorted = np.sort(votes)
+            return votes_sorted[-1] - votes_sorted[-2]
 
+        dist_df["margin"] = dist_df.apply(compute_margin, axis=1)
+
+        # ---- MARGIN SHARE ----
         dist_df["margin_share"] = np.where(
             dist_df["valid_votes"] > 0,
             dist_df["margin"] / dist_df["valid_votes"],
             0
         )
 
-        # Classification
+        # ---- CLASSIFICATION ----
         def classify(row):
             if row["margin_share"] < 0.05:
                 return "Swing"
@@ -106,7 +114,7 @@ if uploaded_file is not None:
         )
 
     # ----------------------------------------------------
-    # HEATMAP: CASTE / RELIGION / AGE
+    # HEATMAP: CASTE × RELIGION × AGE
     # ----------------------------------------------------
     st.subheader("Heatmap: Caste × Religion × Age Category")
 
@@ -167,3 +175,4 @@ if uploaded_file is not None:
 
 else:
     st.info("Please upload a CSV file to begin booth analytics.")
+
